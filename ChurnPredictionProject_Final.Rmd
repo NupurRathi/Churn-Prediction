@@ -1,0 +1,159 @@
+#Objective :Building Models(SVM and LDA) to predict the customers who will cancel their service
+
+
+#Reading the Data
+```{r}
+setwd("D:/Assignments PGBABi/Projects/SVM and LDA Project")
+
+library(readxl)
+data<-read_excel("GA_Dataset.xlsx",sheet=2)
+```
+
+#Understand Data
+```{r}
+str(data)
+```
+#Churn,ContractRenewal,DataPlan has to be converted into :factor
+
+```{r}
+data$Churn<-as.factor(data$Churn)
+data$ContractRenewal<-as.factor(data$ContractRenewal)
+data$DataPlan<-as.factor(data$DataPlan)
+
+summary(data)
+```
+
+#checking for missing data/duplicate data
+```{r}
+anyDuplicated(data) #no duplicate data
+colSums(is.na(data)) #no missing Data in any column
+```
+#check for clASS Imbalance
+```{r}
+prop.table(table(data$Churn))
+```
+
+
+#Quick Visual EDA
+```{r}
+
+library(DataExplorer)
+plot_intro(data)
+plot_missing(data)
+plot_histogram(data)
+plot_boxplot(data,by="Churn")
+plot_bar(data)
+install.packages("corrgram")
+library(corrgram)
+corrplot(corrgram(data))
+
+```
+#Bivariate/Multivariate Analysis
+```{r}
+library(ggplot2)
+ggplot(data)+
+  geom_bar(aes(x=DataPlan,fill=Churn,stat="identity"))
+colnames(data)
+```
+
+
+```{r}
+#Anova
+attach(data)
+#correlation between categorical and continuous variable
+basic_model=aov(DataUsage~Churn)
+summary(basic_model)
+
+#correlation between two categorical variables
+chisq.test(table(Churn,ContractRenewal))
+chisq.test(table(Churn,DataPlan))
+
+```
+
+
+
+
+
+
+
+#Data Split into test and train
+```{r}
+library(caTools)
+set.seed(127)
+split=sample.split(data$Churn,SplitRatio =0.7)
+trainData<-subset(data,split==TRUE)
+testData<-subset(data,split==FALSE)
+```
+
+#Checking Split
+```{r}
+prop.table(table(trainData$Churn))
+prop.table(table(testData$Churn))
+```
+
+#Build Model:SVM.
+```{r}
+library(e1071)
+
+
+obj <- tune(svm, Churn~., data = trainData, 
+              ranges = list(gamma = 2^(-1:1), cost = (1:10)),
+              tunecontrol = tune.control(sampling = "fix")
+             )
+summary(obj)
+
+SVMModel1<-svm(Churn~.,data=trainData,kernel="radial",scale=TRUE, cost = 2, gamma = 0.5) 
+summary(SVMModel1)
+Prediction1<-predict(SVMModel1)
+cm1<-table(Actual=trainData$Churn,Predicted=Prediction1)
+Accuracy_train1<-(cm1[1,1]+cm1[2,2])/(cm1[1,1]+cm1[1,2]+cm1[2,1]+cm1[2,2]) 
+Accuracy_train1
+cm1
+
+
+SVMModel2<-svm(Churn~.,data=trainData,kernel="linear",scale=FALSE, cost = 2, gamma = 0.5)   
+summary(SVMModel2)
+Prediction<-predict(SVMModel2)
+table(Actual=trainData$Churn,Predicted=Prediction)
+
+SVMModel3<-svm(Churn~.,data=trainData,kernel="radial",scale=FALSE, cost = 2, gamma = 0.5)   
+summary(SVMModel3)
+Prediction<-predict(SVMModel3)
+table(Actual=trainData$Churn,Predicted=Prediction)
+
+SVMModel4<-svm(Churn~.,data=trainData,kernel="polynomial",scale=FALSE, cost = 2, gamma = 0.5)  
+summary(SVMModel4)
+Prediction<-predict(SVMModel4)
+cm4 = table(Actual=trainData$Churn,Predicted=Prediction)
+Accuracy_train1<-(cm4[1,1]+cm4[2,2])/(cm4[1,1]+cm4[1,2]+cm4[2,1]+cm4[2,2]) 
+Accuracy_train1
+
+#test Data(Model 3 is complete overfit model therefore using model1)
+Prediction_testData<-predict(SVMModel1,newdata=testData)
+cm_test<-table(Actual=testData$Churn,Predicted=Prediction_testData)
+Accuracy_test<-(cm_test[1,1]+cm_test[2,2])/(cm_test[1,1]+cm_test[1,2]+cm_test[2,1]+cm_test[2,2]) 
+Accuracy_test
+
+```
+#Build Model : LDA
+```{r}
+library(DiscriMiner)
+names(trainData)
+X<-trainData[,-c(1,4,3)]
+#LDA on train Data
+Mahalanabois=linDA(X,trainData$Churn) #error rate14%
+Mahalanabois
+
+
+Mahalanabois2=linDA(X,trainData$Churn,validation = "crossval") #error rate14%
+Mahalanabois2
+
+
+learning=c(which(trainData$Churn==0),which(trainData$Churn==1))
+testing=c(which(testData$Churn==0),which(testData$Churn==1))
+length(testing)
+#on Test Data
+linDA(X,trainData$Churn,validation = "learntest",learn = learning,test=testing)          #errorrate:13%
+
+```
+
